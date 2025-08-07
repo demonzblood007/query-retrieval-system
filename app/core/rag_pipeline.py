@@ -197,10 +197,25 @@ def embed_and_store(chunks: List[Dict[str, Any]], collection_name: str = "docs")
             url=QDRANT_HOST,  # Should include protocol (http/https)
             api_key=QDRANT_API_KEY or None,
         )
+        
+        # Check if collection exists, create if it doesn't
+        try:
+            client.get_collection(collection_name=collection_name)
+            logger.info(f"Collection '{collection_name}' already exists")
+        except Exception:
+            logger.info(f"Creating collection '{collection_name}' with vector size 3072")
+            client.create_collection(
+                collection_name=collection_name,
+                vectors_config={
+                    "size": 3072,  # text-embedding-3-large dimension
+                    "distance": "Cosine"
+                }
+            )
+        
         vectordb = QdrantVectorStore(
             client=client,
             collection_name=collection_name,
-            embedding=embeddings_model,  # <--- THE CRUCIAL FIX
+            embedding=embeddings_model,
         )
         vectordb.add_texts(
             texts=texts,

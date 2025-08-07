@@ -7,6 +7,7 @@ from app.core.rag_pipeline import ingest_documents, answer_questions_advanced, Q
 from langchain_openai import OpenAI
 from qdrant_client import QdrantClient
 from langchain_community.embeddings import OpenAIEmbeddings
+from langchain_qdrant import QdrantVectorStore
 import os
 import logging
 print("FastAPI app is starting...")
@@ -60,14 +61,19 @@ def hackrx_run(
             openai_api_key=OPENAI_API_KEY,
             model="text-embedding-3-large"
         )
-        # Remove the Qdrant instantiation block, as vectordb is handled in rag_pipeline.py
-        # If you need to create a vectordb for querying, use QdrantVectorStore as shown below:
-        # vectordb = QdrantVectorStore(
-        #     collection_name="docs",
-        #     url=QDRANT_HOST,
-        #     api_key=QDRANT_API_KEY,
-        #     embedding_function=embeddings,
-        # )
+        
+        # Create Qdrant client and vector store for querying
+        client = QdrantClient(
+            url=QDRANT_HOST,
+            api_key=QDRANT_API_KEY or None,
+        )
+        
+        vectordb = QdrantVectorStore(
+            client=client,
+            collection_name="docs",
+            embedding=embeddings,
+        )
+        
         openai_llm = OpenAI(
             temperature=0,
             openai_api_key=OPENAI_API_KEY,
@@ -75,7 +81,7 @@ def hackrx_run(
         )
         logger.info("Vector DB and LLMs initialized.")
         # Run advanced pipeline
-        output = answer_questions_advanced(req.questions, None, openai_llm, openai_llm)
+        output = answer_questions_advanced(req.questions, vectordb, openai_llm, openai_llm)
         logger.info("Answer pipeline completed. Returning response.")
         return HackRxResponse(answers=output["answers"])
     except Exception as e:
