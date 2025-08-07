@@ -9,3 +9,4 @@ python-docx
 python-dotenv
 pydantic
 requests
+langchain-openai
