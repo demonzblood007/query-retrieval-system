@@ -17,6 +17,12 @@ import pdfplumber
 from pydantic import BaseModel
 from collections import defaultdict
 import operator
+import threading
+import hashlib
+import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import time
+import json
 
 # Load environment variables from .env file
 load_dotenv()
@@ -34,6 +40,10 @@ QDRANT_API_KEY = os.getenv("QDRANT_API_KEY", None)
 if not QDRANT_HOST.startswith("http://") and not QDRANT_HOST.startswith("https://"):
     QDRANT_HOST = f"http://{QDRANT_HOST}"
 
+# Configure logging for timing
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 # --- State Schema for LangGraph ---
 class RagIngestState(BaseModel):
     load: Optional[List[str]] = None  # document URLs
@@ -48,9 +58,32 @@ class RagQueryState(BaseModel):
     merged_context: Optional[List[Dict[str, Any]]] = None  # Final context for generation
     answer: Optional[Any] = None  # answer from LLM
 
-# --- 1. Document Downloading & Preprocessing ---
+CACHE_FILE = "embedding_cache.json"
+
+def load_embedding_cache():
+    if os.path.exists(CACHE_FILE):
+        with open(CACHE_FILE, "r") as f:
+            return json.load(f)
+    return {}
+
+def save_embedding_cache(cache):
+    with open(CACHE_FILE, "w") as f:
+        json.dump(cache, f)
+
+def hash_url(url: str) -> str:
+    return hashlib.md5(url.encode()).hexdigest()
+
+def hash_text(text: str) -> str:
+    return hashlib.sha256(text.encode('utf-8')).hexdigest()
+
 def download_document(url: str, save_dir: str = DOCUMENTS_DIR) -> str:
-    local_filename = os.path.join(save_dir, url.split("?")[0].split("/")[-1])
+    # Use a hash of the URL for caching
+    filename = hash_url(url) + "_" + url.split("?")[0].split("/")[-1]
+    local_filename = os.path.join(save_dir, filename)
+    if os.path.exists(local_filename):
+        logger.info(f"Cache hit for {url}")
+        return local_filename
+    logger.info(f"Downloading {url}")
     response = requests.get(url)
     with open(local_filename, "wb") as f:
         f.write(response.content)
@@ -65,16 +98,52 @@ def extract_text_from_pdf(file_path: str) -> str:
                 text += page_text + "\n"
     return text
 
-def load_and_preprocess_documents(urls: List[str]) -> List[str]:
-    texts = []
-    for url in urls:
-        file_path = download_document(url)
+def get_max_threads(n_tasks: int) -> int:
+    env_threads = os.getenv("MAX_THREADS")
+    if env_threads is not None:
+        try:
+            env_threads = int(env_threads)
+            logger.info(f"Using MAX_THREADS from environment: {env_threads}")
+            return min(env_threads, n_tasks)
+        except Exception:
+            logger.warning(f"Invalid MAX_THREADS value: {env_threads}, falling back to auto-detect.")
+    cpu_threads = os.cpu_count() or 8
+    max_threads = min(cpu_threads, n_tasks, 16)  # Cap at 16 for safety
+    logger.info(f"Using {max_threads} threads for parallel processing (cpu_count={os.cpu_count()})")
+    return max_threads
+
+def load_and_preprocess_documents(urls: List[str]) -> List[Dict[str, Any]]:
+    start_time = time.time()
+    texts = [None] * len(urls)
+    file_paths = [None] * len(urls)
+    max_threads = get_max_threads(len(urls))
+    # Parallel download
+    with ThreadPoolExecutor(max_workers=max_threads) as executor:
+        future_to_idx = {executor.submit(download_document, url): idx for idx, url in enumerate(urls)}
+        for future in as_completed(future_to_idx):
+            idx = future_to_idx[future]
+            file_paths[idx] = future.result()
+    logger.info(f"Downloaded {len(urls)} documents in {time.time() - start_time:.2f}s")
+    # Parallel parse and chunk
+    def parse_and_chunk(idx, file_path):
         if file_path.lower().endswith(".pdf"):
             text = extract_text_from_pdf(file_path)
         else:
             text = ""
-        texts.append(text)
-    return texts
+        # Chunk the text here
+        splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=100)
+        chunks = []
+        for chunk in splitter.split_text(text):
+            chunks.append({"text": chunk, "doc_index": idx})
+        return chunks
+    all_chunks = []
+    with ThreadPoolExecutor(max_workers=max_threads) as executor:
+        future_to_idx = {executor.submit(parse_and_chunk, idx, file_path): idx for idx, file_path in enumerate(file_paths)}
+        for future in as_completed(future_to_idx):
+            chunks = future.result()
+            all_chunks.extend(chunks)
+    logger.info(f"Parsed and chunked {len(file_paths)} documents into {len(all_chunks)} chunks in {time.time() - start_time:.2f}s (total)")
+    return all_chunks
 
 def chunk_documents(texts: List[str]) -> List[Dict[str, Any]]:
     splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=100)
@@ -85,6 +154,7 @@ def chunk_documents(texts: List[str]) -> List[Dict[str, Any]]:
     return chunks
 
 def embed_and_store(chunks: List[Dict[str, Any]], collection_name: str = "docs") -> Qdrant:
+    import time
     # Use OpenAI's text-embedding-3-large model for embeddings
     embeddings = OpenAIEmbeddings(
         openai_api_key=OPENAI_API_KEY,
@@ -92,15 +162,46 @@ def embed_and_store(chunks: List[Dict[str, Any]], collection_name: str = "docs")
     )
     texts = [c["text"] for c in chunks]
     metadatas = [{"doc_index": c["doc_index"]} for c in chunks]
-    vectordb = Qdrant.from_texts(
+    start_time = time.time()
+    # Load cache
+    cache = load_embedding_cache()
+    chunk_hashes = [hash_text(text) for text in texts]
+    to_embed = []
+    to_embed_indices = []
+    cached_embeddings = []
+    for idx, (h, text) in enumerate(zip(chunk_hashes, texts)):
+        if h in cache:
+            logger.info(f"Embedding cache hit for chunk {idx}")
+            cached_embeddings.append((idx, cache[h]))
+        else:
+            to_embed.append(text)
+            to_embed_indices.append(idx)
+    # Embed only new chunks
+    new_embeddings = []
+    if to_embed:
+        logger.info(f"Embedding {len(to_embed)} new chunks in batch...")
+        new_embeddings = embeddings.embed_documents(to_embed)
+        for idx, emb, text in zip(to_embed_indices, new_embeddings, to_embed):
+            h = hash_text(text)
+            cache[h] = emb
+        save_embedding_cache(cache)
+    # Reconstruct embeddings in original order
+    all_embeddings = [None] * len(texts)
+    for idx, emb in cached_embeddings:
+        all_embeddings[idx] = emb
+    for idx, emb in zip(to_embed_indices, new_embeddings):
+        all_embeddings[idx] = emb
+    # Upsert all (cached + new) in one batch
+    vectordb = Qdrant.from_embeddings(
+        all_embeddings,
         texts,
-        embedding=embeddings,
         metadatas=metadatas,
         collection_name=collection_name,
         location=QDRANT_HOST,
         port=QDRANT_PORT,
         api_key=QDRANT_API_KEY,
     )
+    logger.info(f"Embedded and upserted {len(texts)} chunks to Qdrant in {time.time() - start_time:.2f}s (with cache)")
     return vectordb
 
 def retrieve_context(vectordb: Qdrant, query: str, k: int = 5) -> List[Dict[str, Any]]:
@@ -184,12 +285,13 @@ HYDE_PROMPT = (
 
 # --- Ingestion Pipeline Nodes ---
 def ingest_node_load(state: RagIngestState) -> RagIngestState:
-    texts = load_and_preprocess_documents(state.load)
-    return state.copy(update={"chunk": texts})
+    # Now returns all chunks directly
+    chunks = load_and_preprocess_documents(state.load)
+    return state.copy(update={"embed": chunks})
 
 def ingest_node_chunk(state: RagIngestState) -> RagIngestState:
-    chunks = chunk_documents(state.chunk)
-    return state.copy(update={"embed": chunks})
+    # No-op, as chunking is now done in load step
+    return state
 
 def ingest_node_embed(state: RagIngestState, collection_name: str = "docs") -> RagIngestState:
     embed_and_store(state.embed, collection_name=collection_name)
