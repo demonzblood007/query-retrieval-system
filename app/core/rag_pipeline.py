@@ -33,13 +33,13 @@ os.makedirs(DOCUMENTS_DIR, exist_ok=True)
 
 # Get API keys and Qdrant config from environment
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")
-QDRANT_PORT = os.getenv("QDRANT_PORT", "6333")
-QDRANT_API_KEY = os.getenv("QDRANT_API_KEY", None)
+QDRANT_HOST = os.getenv("QDRANT_HOST", "https://50f5ef9a-3e77-45a2-9e54-a62f9dd2af87.us-west-2-0.aws.cloud.qdrant.io")
+QDRANT_PORT = os.getenv("QDRANT_PORT", "443")  # Qdrant Cloud uses HTTPS on port 443
+QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
 
-# Ensure QDRANT_HOST uses http:// for local development
+# Ensure we have the full URL for Qdrant Cloud
 if not QDRANT_HOST.startswith("http://") and not QDRANT_HOST.startswith("https://"):
-    QDRANT_HOST = f"http://{QDRANT_HOST}"
+    QDRANT_HOST = f"https://{QDRANT_HOST}"
 
 # Configure logging for timing
 logging.basicConfig(level=logging.INFO)

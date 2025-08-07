@@ -3,3 +3,7 @@ __pycache__/
 .env
 documents/
 venv/
+test_qdrant_connection.py
+test_qdrant_cloud.py
+env.example
+deployment.md
