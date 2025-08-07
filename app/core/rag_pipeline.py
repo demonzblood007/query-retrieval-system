@@ -22,7 +22,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
 import json
-from langchain_qdrant import Qdrant  # Updated import
+from langchain_qdrant import QdrantVectorStore  # Updated import
 
 # Load environment variables from .env file
 load_dotenv()
@@ -153,7 +153,7 @@ def chunk_documents(texts: List[str]) -> List[Dict[str, Any]]:
             chunks.append({"text": chunk, "doc_index": idx})
     return chunks
 
-def embed_and_store(chunks: List[Dict[str, Any]], collection_name: str = "docs") -> Qdrant:
+def embed_and_store(chunks: List[Dict[str, Any]], collection_name: str = "docs") -> QdrantVectorStore:
     import time
     embeddings = OpenAIEmbeddings(
         openai_api_key=OPENAI_API_KEY,
@@ -192,7 +192,7 @@ def embed_and_store(chunks: List[Dict[str, Any]], collection_name: str = "docs")
         all_embeddings[idx] = emb
     # Upsert all (cached + new) in one batch using add_texts with precomputed embeddings
     try:
-        vectordb = Qdrant(
+        vectordb = QdrantVectorStore(
             collection_name=collection_name,
             url=QDRANT_HOST,
             api_key=QDRANT_API_KEY,
@@ -209,7 +209,7 @@ def embed_and_store(chunks: List[Dict[str, Any]], collection_name: str = "docs")
         raise
     return vectordb
 
-def retrieve_context(vectordb: Qdrant, query: str, k: int = 5) -> List[Dict[str, Any]]:
+def retrieve_context(vectordb: QdrantVectorStore, query: str, k: int = 5) -> List[Dict[str, Any]]:
     docs = vectordb.similarity_search(query, k=k)
     return [{"text": doc.page_content, "metadata": doc.metadata, "score": getattr(doc, 'score', None)} for doc in docs]
 
@@ -405,7 +405,7 @@ if __name__ == "__main__":
     # Step 1: Ingest documents (run only when documents change)
     ingest_documents(document_urls, collection_name="docs")
     # Step 2: Load vector DB for querying
-    vectordb = Qdrant(
+    vectordb = QdrantVectorStore(
         collection_name="docs",
         url=QDRANT_HOST,
         api_key=QDRANT_API_KEY,
