@@ -190,18 +190,24 @@ def embed_and_store(chunks: List[Dict[str, Any]], collection_name: str = "docs")
         all_embeddings[idx] = emb
     for idx, emb in zip(to_embed_indices, new_embeddings):
         all_embeddings[idx] = emb
-    # Upsert all (cached + new) in one batch using from_texts with precomputed embeddings
-    vectordb = Qdrant.from_texts(
-        texts,
-        embedding=embeddings,
-        metadatas=metadatas,
-        collection_name=collection_name,
-        location=QDRANT_HOST,
-        port=QDRANT_PORT,
-        api_key=QDRANT_API_KEY,
-        embeddings=all_embeddings
-    )
-    logger.info(f"Embedded and upserted {len(texts)} chunks to Qdrant in {time.time() - start_time:.2f}s (with cache)")
+    # Upsert all (cached + new) in one batch using add_texts with precomputed embeddings
+    try:
+        vectordb = Qdrant(
+            collection_name=collection_name,
+            location=QDRANT_HOST,
+            port=QDRANT_PORT,
+            api_key=QDRANT_API_KEY,
+            embedding_function=embeddings,
+        )
+        vectordb.add_texts(
+            texts=texts,
+            metadatas=metadatas,
+            embeddings=all_embeddings
+        )
+        logger.info(f"Embedded and upserted {len(texts)} chunks to Qdrant in {time.time() - start_time:.2f}s (with cache)")
+    except Exception as e:
+        logger.error(f"Error during Qdrant upsert: {e}", exc_info=True)
+        raise
     return vectordb
 
 def retrieve_context(vectordb: Qdrant, query: str, k: int = 5) -> List[Dict[str, Any]]:
