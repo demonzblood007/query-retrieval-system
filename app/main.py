@@ -8,7 +8,7 @@ from langchain_openai import OpenAI
 from qdrant_client import QdrantClient
 from langchain_community.embeddings import OpenAIEmbeddings
 import os
-
+print("FastAPI app is starting...")
 app = FastAPI()
 
 # --- Security ---
