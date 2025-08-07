@@ -163,34 +163,7 @@ def embed_and_store(chunks: List[Dict[str, Any]], collection_name: str = "docs")
     texts = [c["text"] for c in chunks]
     metadatas = [{"doc_index": c["doc_index"]} for c in chunks]
     start_time = time.time()
-    # Load cache
-    cache = load_embedding_cache()
-    chunk_hashes = [hash_text(text) for text in texts]
-    to_embed = []
-    to_embed_indices = []
-    cached_embeddings = []
-    for idx, (h, text) in enumerate(zip(chunk_hashes, texts)):
-        if h in cache:
-            logger.info(f"Embedding cache hit for chunk {idx}")
-            cached_embeddings.append((idx, cache[h]))
-        else:
-            to_embed.append(text)
-            to_embed_indices.append(idx)
-    # Embed only new chunks
-    new_embeddings = []
-    if to_embed:
-        logger.info(f"Embedding {len(to_embed)} new chunks in batch...")
-        new_embeddings = embeddings_model.embed_documents(to_embed)
-        for idx, emb, text in zip(to_embed_indices, new_embeddings, to_embed):
-            h = hash_text(text)
-            cache[h] = emb
-        save_embedding_cache(cache)
-    # Reconstruct embeddings in original order
-    all_embeddings = [None] * len(texts)
-    for idx, emb in cached_embeddings:
-        all_embeddings[idx] = emb
-    for idx, emb in zip(to_embed_indices, new_embeddings):
-        all_embeddings[idx] = emb
+    logger.info(f"Adding {len(texts)} chunks to Qdrant...")
     # QdrantClient approach (robust for all versions)
     try:
         client = QdrantClient(
@@ -219,10 +192,9 @@ def embed_and_store(chunks: List[Dict[str, Any]], collection_name: str = "docs")
         )
         vectordb.add_texts(
             texts=texts,
-            metadatas=metadatas,
-            embeddings=all_embeddings
+            metadatas=metadatas
         )
-        logger.info(f"Embedded and upserted {len(texts)} chunks to Qdrant in {time.time() - start_time:.2f}s (with cache)")
+        logger.info(f"Embedded and upserted {len(texts)} chunks to Qdrant in {time.time() - start_time:.2f}s")
     except Exception as e:
         logger.error(f"Error during Qdrant upsert: {e}", exc_info=True)
         raise
