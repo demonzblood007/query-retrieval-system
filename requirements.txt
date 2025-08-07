@@ -11,3 +11,4 @@ pydantic
 requests
 langchain-openai
 langgraph
+langchain-qdrant

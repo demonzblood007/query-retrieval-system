@@ -10,7 +10,6 @@ import requests
 from typing import List, Dict, Any, Optional
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.embeddings import OpenAIEmbeddings
-from langchain_community.vectorstores import Qdrant
 from langchain_openai import OpenAIEmbeddings, OpenAI  # Updated imports
 from langgraph.graph import StateGraph, END, START
 import pdfplumber
@@ -23,6 +22,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
 import json
+from langchain_qdrant import Qdrant  # Updated import
 
 # Load environment variables from .env file
 load_dotenv()
@@ -194,8 +194,7 @@ def embed_and_store(chunks: List[Dict[str, Any]], collection_name: str = "docs")
     try:
         vectordb = Qdrant(
             collection_name=collection_name,
-            location=QDRANT_HOST,
-            port=QDRANT_PORT,
+            url=QDRANT_HOST,
             api_key=QDRANT_API_KEY,
             embedding_function=embeddings,
         )
@@ -408,8 +407,7 @@ if __name__ == "__main__":
     # Step 2: Load vector DB for querying
     vectordb = Qdrant(
         collection_name="docs",
-        location=QDRANT_HOST,
-        port=QDRANT_PORT,
+        url=QDRANT_HOST,
         api_key=QDRANT_API_KEY,
     )
     # Step 3: Answer questions
