@@ -23,6 +23,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
 import json
 from langchain_qdrant import QdrantVectorStore  # Updated import
+from qdrant_client import QdrantClient
 
 # Load environment variables from .env file
 load_dotenv()
@@ -155,7 +156,7 @@ def chunk_documents(texts: List[str]) -> List[Dict[str, Any]]:
 
 def embed_and_store(chunks: List[Dict[str, Any]], collection_name: str = "docs") -> QdrantVectorStore:
     import time
-    embeddings = OpenAIEmbeddings(
+    embeddings_model = OpenAIEmbeddings(
         openai_api_key=OPENAI_API_KEY,
         model="text-embedding-3-large"
     )
@@ -179,7 +180,7 @@ def embed_and_store(chunks: List[Dict[str, Any]], collection_name: str = "docs")
     new_embeddings = []
     if to_embed:
         logger.info(f"Embedding {len(to_embed)} new chunks in batch...")
-        new_embeddings = embeddings.embed_documents(to_embed)
+        new_embeddings = embeddings_model.embed_documents(to_embed)
         for idx, emb, text in zip(to_embed_indices, new_embeddings, to_embed):
             h = hash_text(text)
             cache[h] = emb
@@ -190,13 +191,16 @@ def embed_and_store(chunks: List[Dict[str, Any]], collection_name: str = "docs")
         all_embeddings[idx] = emb
     for idx, emb in zip(to_embed_indices, new_embeddings):
         all_embeddings[idx] = emb
-    # Upsert all (cached + new) in one batch using add_texts with precomputed embeddings
+    # QdrantClient approach (robust for all versions)
     try:
+        client = QdrantClient(
+            url=QDRANT_HOST,  # Should include protocol (http/https)
+            api_key=QDRANT_API_KEY or None,
+        )
         vectordb = QdrantVectorStore(
+            client=client,
             collection_name=collection_name,
-            url=QDRANT_HOST,
-            api_key=QDRANT_API_KEY,
-            embedding_function=embeddings,
+            embedding=embeddings_model,  # <--- THE CRUCIAL FIX
         )
         vectordb.add_texts(
             texts=texts,
@@ -402,14 +406,28 @@ if __name__ == "__main__":
         "What is the grace period for premium payment under the National Parivar Mediclaim Plus Policy?",
         "What is the waiting period for pre-existing diseases (PED) to be covered?"
     ]
-    # Step 1: Ingest documents (run only when documents change)
+    print("Starting document ingestion...")
     ingest_documents(document_urls, collection_name="docs")
-    # Step 2: Load vector DB for querying
-    vectordb = QdrantVectorStore(
-        collection_name="docs",
-        url=QDRANT_HOST,
-        api_key=QDRANT_API_KEY,
+    print("Ingestion complete.")
+    print("Initializing Qdrant client and vector store for querying...")
+    embeddings_model = OpenAIEmbeddings(
+        openai_api_key=OPENAI_API_KEY,
+        model="text-embedding-3-large"
     )
-    # Step 3: Answer questions
-    output = answer_questions(questions, vectordb)
-    print(output)
+    client = QdrantClient(
+        url=QDRANT_HOST,
+        api_key=QDRANT_API_KEY or None,
+    )
+    vectordb = QdrantVectorStore(
+        client=client,
+        collection_name="docs",
+        embedding=embeddings_model,
+    )
+    print("Answering questions...")
+    from langchain_openai import OpenAI
+    small_llm = OpenAI(temperature=0, openai_api_key=OPENAI_API_KEY, model="gpt-4o-mini")
+    gpt4_llm = OpenAI(temperature=0, openai_api_key=OPENAI_API_KEY, model="gpt-4o-mini")
+    output = answer_questions_advanced(questions, vectordb, small_llm, gpt4_llm)
+    print("\n--- Final Output ---")
+    import json
+    print(json.dumps(output, indent=2))

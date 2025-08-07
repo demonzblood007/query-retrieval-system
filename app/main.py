@@ -3,7 +3,7 @@ from fastapi import Request, HTTPException, status, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from typing import List, Union
-from app.core.rag_pipeline import ingest_documents, answer_questions_advanced, Qdrant, QDRANT_HOST, QDRANT_PORT, QDRANT_API_KEY, OPENAI_API_KEY
+from app.core.rag_pipeline import ingest_documents, answer_questions_advanced, QDRANT_HOST, QDRANT_PORT, QDRANT_API_KEY, OPENAI_API_KEY
 from langchain_openai import OpenAI
 from qdrant_client import QdrantClient
 from langchain_community.embeddings import OpenAIEmbeddings
@@ -56,22 +56,18 @@ def hackrx_run(
         raise HTTPException(status_code=500, detail=f"Document ingestion failed: {e}")
     # Prepare vector DB and LLMs
     try:
-        client = QdrantClient(
-            url=QDRANT_HOST if QDRANT_HOST.startswith("http") else None,
-            host=None if QDRANT_HOST.startswith("http") else QDRANT_HOST,
-            port=int(QDRANT_PORT),
-            api_key=QDRANT_API_KEY,
-        )
-        logger.info("Qdrant client initialized.")
         embeddings = OpenAIEmbeddings(
             openai_api_key=OPENAI_API_KEY,
             model="text-embedding-3-large"
         )
-        vectordb = Qdrant(
-            client=client,
-            collection_name="docs",
-            embeddings=embeddings
-        )
+        # Remove the Qdrant instantiation block, as vectordb is handled in rag_pipeline.py
+        # If you need to create a vectordb for querying, use QdrantVectorStore as shown below:
+        # vectordb = QdrantVectorStore(
+        #     collection_name="docs",
+        #     url=QDRANT_HOST,
+        #     api_key=QDRANT_API_KEY,
+        #     embedding_function=embeddings,
+        # )
         openai_llm = OpenAI(
             temperature=0,
             openai_api_key=OPENAI_API_KEY,
@@ -79,7 +75,7 @@ def hackrx_run(
         )
         logger.info("Vector DB and LLMs initialized.")
         # Run advanced pipeline
-        output = answer_questions_advanced(req.questions, vectordb, openai_llm, openai_llm)
+        output = answer_questions_advanced(req.questions, None, openai_llm, openai_llm)
         logger.info("Answer pipeline completed. Returning response.")
         return HackRxResponse(answers=output["answers"])
     except Exception as e:
