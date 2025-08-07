@@ -6,4 +6,3 @@ venv/
 test_qdrant_connection.py
 test_qdrant_cloud.py
 env.example
-DEPLOYMENT_GUIDE.md
