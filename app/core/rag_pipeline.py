@@ -13,6 +13,9 @@ from langchain_community.embeddings import OpenAIEmbeddings
 from langchain_openai import OpenAIEmbeddings, OpenAI  # Updated imports
 from langgraph.graph import StateGraph, END, START
 import pdfplumber
+from docx import Document
+from email import policy
+from email.parser import BytesParser
 from pydantic import BaseModel
 from collections import defaultdict
 import operator
@@ -99,6 +102,57 @@ def extract_text_from_pdf(file_path: str) -> str:
                 text += page_text + "\n"
     return text
 
+def extract_text_from_docx(file_path: str) -> str:
+    try:
+        document = Document(file_path)
+        paragraphs = [para.text for para in document.paragraphs if para.text]
+        return "\n".join(paragraphs)
+    except Exception:
+        return ""
+
+def _strip_html_tags(html: str) -> str:
+    # Lightweight HTML stripper to avoid extra dependencies
+    import re
+    # Remove scripts/styles
+    html = re.sub(r"<script[\s\S]*?</script>", " ", html, flags=re.IGNORECASE)
+    html = re.sub(r"<style[\s\S]*?</style>", " ", html, flags=re.IGNORECASE)
+    # Replace <br> and <p> with newlines
+    html = re.sub(r"<(br|/p|/div)>", "\n", html, flags=re.IGNORECASE)
+    # Strip all tags
+    text = re.sub(r"<[^>]+>", " ", html)
+    # Collapse whitespace
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
+
+def extract_text_from_eml(file_path: str) -> str:
+    try:
+        with open(file_path, 'rb') as f:
+            msg = BytesParser(policy=policy.default).parse(f)
+        parts_text: list[str] = []
+        if msg.is_multipart():
+            for part in msg.walk():
+                content_type = part.get_content_type()
+                try:
+                    payload = part.get_content()
+                except Exception:
+                    payload = None
+                if not payload:
+                    continue
+                if content_type == 'text/plain':
+                    parts_text.append(str(payload))
+                elif content_type == 'text/html':
+                    parts_text.append(_strip_html_tags(str(payload)))
+        else:
+            content_type = msg.get_content_type()
+            payload = msg.get_content()
+            if content_type == 'text/plain':
+                parts_text.append(str(payload))
+            elif content_type == 'text/html':
+                parts_text.append(_strip_html_tags(str(payload)))
+        return "\n".join(t for t in parts_text if t).strip()
+    except Exception:
+        return ""
+
 def get_max_threads(n_tasks: int) -> int:
     env_threads = os.getenv("MAX_THREADS")
     if env_threads is not None:
@@ -127,8 +181,19 @@ def load_and_preprocess_documents(urls: List[str]) -> List[Dict[str, Any]]:
     logger.info(f"Downloaded {len(urls)} documents in {time.time() - start_time:.2f}s")
     # Parallel parse and chunk
     def parse_and_chunk(idx, file_path):
-        if file_path.lower().endswith(".pdf"):
+        lower_path = file_path.lower()
+        if lower_path.endswith(".pdf"):
             text = extract_text_from_pdf(file_path)
+        elif lower_path.endswith(".docx"):
+            text = extract_text_from_docx(file_path)
+        elif lower_path.endswith(".eml"):
+            text = extract_text_from_eml(file_path)
+        elif lower_path.endswith(".txt"):
+            try:
+                with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    text = f.read()
+            except Exception:
+                text = ""
         else:
             text = ""
         # Chunk the text here
