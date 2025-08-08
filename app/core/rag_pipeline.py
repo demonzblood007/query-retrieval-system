@@ -270,11 +270,11 @@ def retrieve_context(vectordb: QdrantVectorStore, query: str, k: int = 5) -> Lis
     return [{"text": doc.page_content, "metadata": doc.metadata, "score": getattr(doc, 'score', None)} for doc in docs]
 
 def generate_answer(context: List[Dict[str, Any]], query: str) -> str:
-    # Use OpenAI's GPT-4o-mini for answer generation
+    # Use OpenAI's GPT-4o for final grounded answer generation
     llm = OpenAI(
         temperature=0,
         openai_api_key=OPENAI_API_KEY,
-        model="gpt-4o-mini"
+        model="gpt-4o"
     )
     context_str = "\n\n".join([c["text"] for c in context])
     prompt = (
@@ -478,7 +478,7 @@ if __name__ == "__main__":
     print("Answering questions...")
     from langchain_openai import OpenAI
     small_llm = OpenAI(temperature=0, openai_api_key=OPENAI_API_KEY, model="gpt-4o-mini")
-    gpt4_llm = OpenAI(temperature=0, openai_api_key=OPENAI_API_KEY, model="gpt-4o-mini")
+    gpt4_llm = OpenAI(temperature=0, openai_api_key=OPENAI_API_KEY, model="gpt-4o")
     output = answer_questions_advanced(questions, vectordb, small_llm, gpt4_llm)
     print("\n--- Final Output ---")
     import json
