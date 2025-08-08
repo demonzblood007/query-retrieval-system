@@ -4,7 +4,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from typing import List, Union
 from app.core.rag_pipeline import ingest_documents, answer_questions_advanced, QDRANT_HOST, QDRANT_PORT, QDRANT_API_KEY, OPENAI_API_KEY
-from langchain_openai import OpenAI
+from langchain_openai import ChatOpenAI
 from qdrant_client import QdrantClient
 from langchain_community.embeddings import OpenAIEmbeddings
 from langchain_qdrant import QdrantVectorStore
@@ -74,14 +74,19 @@ def hackrx_run(
             embedding=embeddings,
         )
         
-        openai_llm = OpenAI(
+        small_llm = ChatOpenAI(
             temperature=0,
             openai_api_key=OPENAI_API_KEY,
             model="gpt-4o-mini"
         )
+        gpt4_llm = ChatOpenAI(
+            temperature=0,
+            openai_api_key=OPENAI_API_KEY,
+            model="gpt-4o"
+        )
         logger.info("Vector DB and LLMs initialized.")
         # Run advanced pipeline
-        output = answer_questions_advanced(req.questions, vectordb, openai_llm, openai_llm)
+        output = answer_questions_advanced(req.questions, vectordb, small_llm, gpt4_llm)
         logger.info("Answer pipeline completed. Returning response.")
         return HackRxResponse(answers=output["answers"])
     except Exception as e:
