@@ -284,7 +284,11 @@ def generate_answer(context: List[Dict[str, Any]], query: str) -> str:
         f"Question: {query}\n"
         f"Answer:"
     )
-    return llm.invoke(prompt)
+    msg = llm.invoke(prompt)
+    try:
+        return msg.content  # ChatOpenAI returns an AIMessage
+    except AttributeError:
+        return str(msg)
 
 def format_output(answer: str, context: List[Dict[str, Any]]) -> Dict[str, Any]:
     return {
@@ -375,7 +379,8 @@ def build_ingest_graph(collection_name: str = "docs"):
 def query_node_translate(state: RagQueryState, question, small_llm, vectordb, n: int = 5, k: int = 5) -> RagQueryState:
     prompt = QUERY_TRANSLATION_PROMPT.format(question=question)
     llm_output = small_llm.invoke(prompt)
-    translated_queries = [q.strip(" .-") for q in llm_output.split("\n") if q.strip()][:n]
+    output_text = getattr(llm_output, "content", str(llm_output))
+    translated_queries = [q.strip(" .-") for q in output_text.split("\n") if q.strip()][:n]
     all_chunks_per_query = []
     for tq in translated_queries:
         chunks = retrieve_context(vectordb, tq, k=k)
@@ -391,7 +396,8 @@ def query_node_translate(state: RagQueryState, question, small_llm, vectordb, n:
 
 def query_node_hyde(state: RagQueryState, question, gpt4_llm) -> RagQueryState:
     prompt = HYDE_PROMPT.format(question=question)
-    hyde_answer = gpt4_llm.invoke(prompt)
+    hyde_msg = gpt4_llm.invoke(prompt)
+    hyde_answer = getattr(hyde_msg, "content", str(hyde_msg))
     hyde_context = [{"text": hyde_answer, "metadata": {"source": "HYDE"}}]
     return state.copy(update={"hyde_context": hyde_context})
 
