@@ -1,11 +1,116 @@
+# Python
 __pycache__/
-*.pyc
-.env
-documents/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Virtual environments
 venv/
-test_qdrant_connection.py
-test_qdrant_cloud.py
-env.example
-quick_test.py
-DEPLOYMENT_GUIDE.md
-*.md
+ENV/
+env/
+.venv/
+.ENV/
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment variables
+.env
+.env.production
+.env.local
+.env.development
+
+# Cache files
+embedding_cache.json
+*.cache
+
+# Document downloads cache
+documents/
+qdrant_local/
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+.temporary/
+
+# Jupyter Notebooks
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+
+# AWS / Cloud
+.aws/
+.gcp/
+
+# Test files (development only)
+test_*.py
+*_test.py
+scratch.*
+
+# Documentation build
+_build/
+.sphinx/

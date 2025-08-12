@@ -3,7 +3,7 @@ uvicorn
 langchain
 langchain-community
 openai
-qdrant-client
+qdrant-client[local]
 pdfplumber
 python-docx
 python-dotenv
@@ -12,3 +12,4 @@ requests
 langchain-openai
 langgraph
 langchain-qdrant
+psutil

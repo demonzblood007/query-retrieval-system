@@ -1,0 +1,21 @@
+version: 1.0
+runtime: docker
+build:
+  commands:
+    build:
+      - echo "Building with Docker"
+run:
+  runtime-version: latest
+  command: ./run.sh
+  network:
+    port: 8080
+    env: PORT
+  env:
+    - name: PORT
+      value: "8080"
+    - name: START_LOCAL_QDRANT
+      value: "true"
+    - name: ENABLE_QDRANT_CACHE
+      value: "true"
+    - name: PYTHONUNBUFFERED
+      value: "1"

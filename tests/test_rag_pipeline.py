@@ -1,10 +1,15 @@
 import sys
 import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from app.core.rag_pipeline import answer_questions_advanced, Qdrant, QDRANT_HOST, QDRANT_PORT, QDRANT_API_KEY, OPENAI_API_KEY
-from langchain_openai import OpenAI
+
+# Load environment variables
+from dotenv import load_dotenv
+load_dotenv()
+
+from app.core.rag_pipeline import ingest_documents, answer_questions_advanced, QDRANT_HOST, QDRANT_PORT, QDRANT_API_KEY, OPENAI_API_KEY
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from qdrant_client import QdrantClient
-from langchain_community.embeddings import OpenAIEmbeddings
+from langchain_qdrant import QdrantVectorStore
 
 def test_hackrx_sample():
     document_urls = [
@@ -22,31 +27,36 @@ def test_hackrx_sample():
         "What is the extent of coverage for AYUSH treatments?",
         "Are there any sub-limits on room rent and ICU charges for Plan A?"
     ]
+    
+    # First ingest the documents
+    print("Starting document ingestion...")
+    ingest_documents(document_urls, collection_name="docs")
+    print("Ingestion complete.")
+    
     # Load vector DB for querying
     # If QDRANT_HOST contains protocol, use 'url', else use 'host'
     if QDRANT_HOST.startswith("http://") or QDRANT_HOST.startswith("https://"):
         client = QdrantClient(
             url=QDRANT_HOST,
-            port=QDRANT_PORT,
             api_key=QDRANT_API_KEY,
         )
     else:
         client = QdrantClient(
             host=QDRANT_HOST,
-            port=QDRANT_PORT,
+            port=int(QDRANT_PORT),
             api_key=QDRANT_API_KEY,
         )
     embeddings = OpenAIEmbeddings(
         openai_api_key=OPENAI_API_KEY,
         model="text-embedding-3-large"
     )
-    vectordb = Qdrant(
+    vectordb = QdrantVectorStore(
         client=client,
         collection_name="docs",
-        embeddings=embeddings
+        embedding=embeddings
     )
     # Use real OpenAI LLM for both translation and HYDE
-    openai_llm = OpenAI(
+    openai_llm = ChatOpenAI(
         temperature=0,
         openai_api_key=OPENAI_API_KEY,
         model="gpt-4o-mini"
