@@ -1,19 +1,16 @@
 version: 1.0
-runtime: docker
+runtime: python3
+runtimeVersion: 3.10
 build:
   commands:
-    build:
-      - echo "Building with Docker"
+    - pip install --no-cache-dir -r requirements.txt
 run:
-  command: ./run.sh
+  command: uvicorn app.main:app --host 0.0.0.0 --port 8080
   network:
     port: 8080
-    env: PORT
   env:
     - name: PORT
       value: "8080"
-    - name: START_LOCAL_QDRANT
-      value: "true"
     - name: ENABLE_QDRANT_CACHE
       value: "true"
     - name: PYTHONUNBUFFERED
