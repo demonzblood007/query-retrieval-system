@@ -19,3 +19,16 @@ run:
       value: "true"
     - name: PYTHONUNBUFFERED
       value: "1"
+    # Performance tuning for large files
+    - name: CHUNK_SIZE
+      value: "1200"
+    - name: CHUNK_OVERLAP
+      value: "150"
+    - name: MAX_THREADS
+      value: "4"
+    - name: EMBED_BATCH_SIZE
+      value: "32"
+    - name: QDRANT_TIMEOUT
+      value: "120"
+    - name: QDRANT_RETRIES
+      value: "5"

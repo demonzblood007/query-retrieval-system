@@ -26,7 +26,11 @@ print("FastAPI app is starting...")
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI()
+app = FastAPI(
+    title="Legal Chatbot RAG Pipeline",
+    description="Production-ready document analysis and question answering",
+    version="1.0.0"
+)
 logger.info("FastAPI app instance created.")
 
 # --- Security ---
@@ -49,7 +53,7 @@ class HackRxResponse(BaseModel):
 
 # --- Endpoint ---
 @app.post("/hackrx/run", response_model=HackRxResponse)
-def hackrx_run(
+async def hackrx_run(
     req: HackRxRequest,
     credentials: HTTPAuthorizationCredentials = Depends(security),
     request: Request = None,
