@@ -5,7 +5,6 @@ build:
     build:
       - echo "Building with Docker"
 run:
-  runtime-version: latest
   command: ./run.sh
   network:
     port: 8080
